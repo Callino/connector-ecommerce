@@ -4,6 +4,17 @@
 
 from openerp.addons.connector.event import Event
 
+on_product_qty = Event()
+"""
+``on_product_qty`` is fired when a product qty is maybe changed
+
+Listeners should take the following arguments:
+
+ * session: `connector.session.ConnectorSession` object
+ * model_name: name of the model
+ * record_id: id of the record
+"""
+
 
 on_picking_out_done = Event()
 """

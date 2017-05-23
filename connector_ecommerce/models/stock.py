@@ -5,7 +5,10 @@
 from openerp import models, fields, api
 
 from openerp.addons.connector.session import ConnectorSession
-from .event import on_picking_out_done, on_tracking_number_added
+from .event import on_picking_out_done, on_tracking_number_added, on_product_qty
+import logging
+
+_logger = logging.getLogger(__name__)
 
 
 class StockPicking(models.Model):
@@ -51,6 +54,8 @@ class StockMove(models.Model):
 
     @api.multi
     def action_done(self):
+        _logger.info("in stock.move action_done")
+        session = ConnectorSession.from_env(self.env)
         fire_event = not self.env.context.get('__no_on_event_out_done')
         if fire_event:
             pickings = self.mapped('picking_id')
@@ -59,8 +64,15 @@ class StockMove(models.Model):
         result = super(StockMove, self).action_done()
 
         if fire_event:
-            session = ConnectorSession.from_env(self.env)
+            # Do fire the on_move_done event every time - to be able to track stock value !
+            for move in self:
+                on_product_qty.fire(session, 'product.product',
+                                    move.product_id.id)
+
+        if fire_event:
+            _logger.info("do fire an event")
             for picking in pickings:
+                _logger.info("do fire an event for picking %r", picking)
                 if states[picking.id] != 'done' and picking.state == 'done':
                     if picking.picking_type_id.code != 'outgoing':
                         continue
@@ -70,3 +82,27 @@ class StockMove(models.Model):
                                              picking.id, 'complete')
 
         return result
+
+    @api.multi
+    def write(self, vals):
+        fire_event = not self.env.context.get('__no_on_event_out_done')
+        res = super(StockMove, self).write(vals)
+        if fire_event:
+            session = ConnectorSession.from_env(self.env)
+            # Do fire the on_move_done event every time - to be able to track stock value !
+            for move in self:
+                on_product_qty.fire(session, 'product.product',
+                                    move.product_id.id)
+        return res
+
+    @api.multi
+    def create(self, vals):
+        fire_event = not self.env.context.get('__no_on_event_out_done')
+        res = super(StockMove, self).create(vals)
+        if fire_event:
+            session = ConnectorSession.from_env(self.env)
+            # Do fire the on_move_done event every time - to be able to track stock value !
+            on_product_qty.fire(session, 'product.product',
+                                res.product_id.id)
+        return res
+
